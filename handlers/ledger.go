@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"html"
 	"html/template"
 	"log"
 	"net/http"
@@ -19,7 +20,7 @@ func (gh *GRCHandler) LedgerHandler(w http.ResponseWriter, r *http.Request) {
 		content = []byte("# No Ledger Available\n\nNo ledger data has been generated yet.")
 	}
 
-	t, err := gh.loadTemplate("/templates/ledger.html")
+	t, err := gh.loadTemplate("templates/ledger.html")
 	if err != nil {
 		log.Println("ERROR: could not get ledger template: ", err)
 		http.Error(w, err.Error(), 500)
@@ -34,10 +35,11 @@ func (gh *GRCHandler) LedgerHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// markdownToHTML converts simple markdown to HTML
+// markdownToHTML converts markdown to HTML with proper escaping
 // This is a minimal implementation for the ledger display
 func markdownToHTML(md string) string {
-	// For now, we'll use a simple pre-formatted display
-	// A full markdown parser would be more complex
-	return `<div class="ledger-content">` + string(md) + `</div>`
+	// Escape HTML to prevent XSS attacks
+	escaped := html.EscapeString(md)
+	// Wrap in a div with proper styling
+	return `<div class="ledger-content">` + escaped + `</div>`
 }
