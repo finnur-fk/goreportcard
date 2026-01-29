@@ -1,0 +1,184 @@
+[[ define "content" ]]
+<section class="section">
+  <div class="container">
+    <h1 class="title">📊 Box 0 Bookkeeping Viewer</h1>
+    <h2 class="subtitle">Financial Transaction Dashboard - [[ .Year ]]</h2>
+    
+    <!-- Summary Cards -->
+    <div class="columns">
+      <div class="column">
+        <div class="box">
+          <p class="heading">Net Liquidity</p>
+          <p class="title">[[ printf "%.2f" .Summary.NetLiquidity ]]</p>
+        </div>
+      </div>
+      <div class="column">
+        <div class="box">
+          <p class="heading">Total Payments</p>
+          <p class="title">[[ printf "%.2f" .Summary.PaymentsSum ]]</p>
+          <p class="subtitle">([[ .Summary.TotalPayments ]] transactions)</p>
+        </div>
+      </div>
+      <div class="column">
+        <div class="box">
+          <p class="heading">Total Transfers</p>
+          <p class="title">[[ printf "%.2f" .Summary.TransfersSum ]]</p>
+          <p class="subtitle">([[ .Summary.TotalTransfers ]] transactions)</p>
+        </div>
+      </div>
+      <div class="column">
+        <div class="box">
+          <p class="heading">Total Fees</p>
+          <p class="title">[[ printf "%.2f" .Summary.FeesSum ]]</p>
+          <p class="subtitle">([[ .Summary.TotalFees ]] transactions)</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="content">
+      <button class="button is-primary" id="refresh-btn">
+        <span class="icon">
+          <i class="fa fa-refresh"></i>
+        </span>
+        <span>Refresh Data</span>
+      </button>
+      <button class="button is-info" id="process-btn">
+        <span class="icon">
+          <i class="fa fa-cog"></i>
+        </span>
+        <span>Process Transactions</span>
+      </button>
+      <a href="/api/bookkeeping" class="button is-link">
+        <span class="icon">
+          <i class="fa fa-download"></i>
+        </span>
+        <span>Export JSON</span>
+      </a>
+    </div>
+
+    <!-- Payments Table -->
+    [[ if .Transactions.Payments ]]
+    <div class="box">
+      <h3 class="title is-4">💰 Payments ([[ len .Transactions.Payments ]])</h3>
+      <table class="table is-striped is-fullwidth">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Amount</th>
+            <th>Description</th>
+            <th>Transaction ID</th>
+          </tr>
+        </thead>
+        <tbody>
+          [[ range .Transactions.Payments ]]
+          <tr>
+            <td>[[ .Date ]]</td>
+            <td class="has-text-success">[[ .Amount ]]</td>
+            <td>[[ .Description ]]</td>
+            <td><code>[[ .TransactionID ]]</code></td>
+          </tr>
+          [[ end ]]
+        </tbody>
+      </table>
+    </div>
+    [[ end ]]
+
+    <!-- Transfers Table -->
+    [[ if .Transactions.Transfers ]]
+    <div class="box">
+      <h3 class="title is-4">🔄 Transfers ([[ len .Transactions.Transfers ]])</h3>
+      <table class="table is-striped is-fullwidth">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Amount</th>
+            <th>Description</th>
+            <th>Transaction ID</th>
+          </tr>
+        </thead>
+        <tbody>
+          [[ range .Transactions.Transfers ]]
+          <tr>
+            <td>[[ .Date ]]</td>
+            <td class="has-text-warning">[[ .Amount ]]</td>
+            <td>[[ .Description ]]</td>
+            <td><code>[[ .TransactionID ]]</code></td>
+          </tr>
+          [[ end ]]
+        </tbody>
+      </table>
+    </div>
+    [[ end ]]
+
+    <!-- Fees Table -->
+    [[ if .Transactions.Fees ]]
+    <div class="box">
+      <h3 class="title is-4">💳 Fees ([[ len .Transactions.Fees ]])</h3>
+      <table class="table is-striped is-fullwidth">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Amount</th>
+            <th>Description</th>
+            <th>Transaction ID</th>
+          </tr>
+        </thead>
+        <tbody>
+          [[ range .Transactions.Fees ]]
+          <tr>
+            <td>[[ .Date ]]</td>
+            <td class="has-text-danger">[[ .Amount ]]</td>
+            <td>[[ .Description ]]</td>
+            <td><code>[[ .TransactionID ]]</code></td>
+          </tr>
+          [[ end ]]
+        </tbody>
+      </table>
+    </div>
+    [[ end ]]
+
+    [[ if not .Transactions ]]
+    <div class="notification is-warning">
+      <p>No transaction data found. Please ensure CSV files are present in the vault directory.</p>
+    </div>
+    [[ end ]]
+  </div>
+</section>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  const refreshBtn = document.getElementById('refresh-btn');
+  const processBtn = document.getElementById('process-btn');
+
+  refreshBtn.addEventListener('click', function() {
+    location.reload();
+  });
+
+  processBtn.addEventListener('click', function() {
+    processBtn.classList.add('is-loading');
+    
+    fetch('/bookkeeping/process', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      }
+    })
+    .then(response => response.json())
+    .then(data => {
+      processBtn.classList.remove('is-loading');
+      if (data.status === 'success') {
+        alert('✓ ' + data.message);
+        location.reload();
+      } else {
+        alert('✗ Error: ' + data.message);
+      }
+    })
+    .catch(error => {
+      processBtn.classList.remove('is-loading');
+      alert('✗ Error processing transactions: ' + error);
+    });
+  });
+});
+</script>
+[[ end ]]

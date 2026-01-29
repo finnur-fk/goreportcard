@@ -1,6 +1,6 @@
 # Vault Transaction Processor
 
-A robust Go package for processing PayPal CSV transaction files and generating ledger reports.
+A robust Go package for processing PayPal CSV transaction files and generating ledger reports with web-based viewer.
 
 ## Features
 
@@ -9,6 +9,9 @@ A robust Go package for processing PayPal CSV transaction files and generating l
   - **Payments**: Incoming payments from customers
   - **Transfers**: Money transfers to/from accounts
   - **Fees**: PayPal processing and service fees
+- **Web Interface**: Beautiful Box 0 Bookkeeping Viewer with real-time dashboard
+- **JSON API**: RESTful API endpoint for accessing transaction data
+- **Security**: Input validation, path sanitization, and method restrictions
 - **Error Handling**: Robust error handling for file and data issues with detailed logging
 - **Ledger Generation**: Generates formatted markdown ledger reports with transaction tables
 - **High Code Quality**: Follows Go best practices with comprehensive documentation
@@ -20,6 +23,49 @@ go get github.com/gojp/goreportcard/vault
 ```
 
 ## Usage
+
+### Web Interface (Recommended)
+
+Access the bookkeeping viewer through the web interface:
+
+1. Start the Go Report Card server:
+```bash
+GRC_DATABASE_PATH=./db VAULT_DIR=./vault LEDGER_DIR=./ledger go run main.go
+```
+
+2. Navigate to: `http://localhost:8000/bookkeeping/`
+
+The web interface provides:
+- **Real-time Dashboard**: View Net Liquidity and transaction summaries
+- **Categorized Tables**: Browse Payments, Transfers, and Fees
+- **Action Buttons**: Refresh data, process transactions, export JSON
+- **Responsive Design**: Works on desktop and mobile devices
+
+### JSON API
+
+Access transaction data programmatically:
+
+```bash
+curl http://localhost:8000/api/bookkeeping
+```
+
+Returns:
+```json
+{
+  "transactions": {
+    "Payments": [...],
+    "Transfers": [...],
+    "Fees": [...]
+  },
+  "summary": {
+    "total_transactions": 7,
+    "net_liquidity": 267.26,
+    "payments_sum": 425.75,
+    ...
+  },
+  "count": 7
+}
+```
 
 ### As a Library
 
@@ -159,6 +205,18 @@ The processor includes comprehensive error handling:
 - Logs warnings for malformed CSV rows (continues processing)
 - Returns errors for critical issues (file access, write failures)
 - Provides detailed error messages with context
+
+## Security Features
+
+The package implements multiple security measures:
+
+- **Path Sanitization**: Prevents directory traversal attacks using `filepath.Clean()` and `filepath.Abs()`
+- **Input Validation**: Validates CSV data including date formats and transaction IDs
+- **Control Character Filtering**: Rejects transaction IDs containing control characters
+- **HTTP Method Restrictions**: API endpoints only accept appropriate HTTP methods (GET/POST)
+- **Error Sanitization**: Prevents sensitive path information from leaking in error messages
+- **Read-only CSV Access**: Files are opened in read-only mode
+- **No Code Execution**: Pure data processing with no dynamic code execution
 
 ## Logging
 
