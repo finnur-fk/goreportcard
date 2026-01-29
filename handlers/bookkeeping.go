@@ -3,16 +3,18 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/dgraph-io/badger/v2"
 	"github.com/gojp/goreportcard/vault"
 )
 
 // BookkeepingHandler serves the bookkeeping viewer page showing transaction data
-func (gh GRCHandler) BookkeepingHandler(w http.ResponseWriter, r *http.Request, db *badger.DB) {
+func (gh *GRCHandler) BookkeepingHandler(w http.ResponseWriter, r *http.Request, db *badger.DB) {
 	// Security: Only allow GET requests
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -21,7 +23,7 @@ func (gh GRCHandler) BookkeepingHandler(w http.ResponseWriter, r *http.Request, 
 
 	t, err := gh.loadTemplate("/templates/bookkeeping.html")
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to load template: %v", err), http.StatusInternalServerError)
+		http.Error(w, "Failed to load template", http.StatusInternalServerError)
 		return
 	}
 
@@ -31,13 +33,13 @@ func (gh GRCHandler) BookkeepingHandler(w http.ResponseWriter, r *http.Request, 
 
 	processor, err := vault.NewTransactionProcessor(vaultDir, ledgerDir)
 	if err != nil {
-		renderError(w, "Failed to initialize transaction processor", err)
+		http.Error(w, "Failed to initialize transaction processor", http.StatusInternalServerError)
 		return
 	}
 
 	transactions, err := processor.ReadCSVFiles()
 	if err != nil {
-		renderError(w, "Failed to read transaction files", err)
+		http.Error(w, "Failed to read transaction files", http.StatusInternalServerError)
 		return
 	}
 
@@ -54,10 +56,13 @@ func (gh GRCHandler) BookkeepingHandler(w http.ResponseWriter, r *http.Request, 
 		"Fees":      categorized[vault.FeeTransaction],
 	}
 
+	// Use current year dynamically
+	currentYear := fmt.Sprintf("%d", time.Now().Year())
+
 	data := map[string]interface{}{
 		"Transactions":         transactionData,
 		"Summary":              summary,
-		"Year":                 "2026",
+		"Year":                 currentYear,
 		"google_analytics_key": googleAnalyticsKey,
 	}
 
@@ -67,27 +72,32 @@ func (gh GRCHandler) BookkeepingHandler(w http.ResponseWriter, r *http.Request, 
 }
 
 // BookkeepingAPIHandler provides JSON API for transaction data
-func (gh GRCHandler) BookkeepingAPIHandler(w http.ResponseWriter, r *http.Request, db *badger.DB) {
+func (gh *GRCHandler) BookkeepingAPIHandler(w http.ResponseWriter, r *http.Request, db *badger.DB) {
 	// Security: Only allow GET requests
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
+	// Set content type first
+	w.Header().Set("Content-Type", "application/json")
+
 	vaultDir := getEnvOrDefault("VAULT_DIR", "vault")
 	ledgerDir := getEnvOrDefault("LEDGER_DIR", "ledger")
 
 	processor, err := vault.NewTransactionProcessor(vaultDir, ledgerDir)
 	if err != nil {
+		log.Printf("Error initializing processor: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to initialize transaction processor"})
 		return
 	}
 
 	transactions, err := processor.ReadCSVFiles()
 	if err != nil {
+		log.Printf("Error reading CSV files: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		json.NewEncoder(w).Encode(map[string]string{"error": "Failed to read transaction files"})
 		return
 	}
 
@@ -111,30 +121,32 @@ func (gh GRCHandler) BookkeepingAPIHandler(w http.ResponseWriter, r *http.Reques
 		Count:        len(transactions),
 	}
 
-	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(response)
 }
 
 // ProcessTransactionsHandler triggers manual processing of CSV files
-func (gh GRCHandler) ProcessTransactionsHandler(w http.ResponseWriter, r *http.Request, db *badger.DB) {
+func (gh *GRCHandler) ProcessTransactionsHandler(w http.ResponseWriter, r *http.Request, db *badger.DB) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
+	// Set content type first
+	w.Header().Set("Content-Type", "application/json")
+
 	vaultDir := getEnvOrDefault("VAULT_DIR", "vault")
 	ledgerDir := getEnvOrDefault("LEDGER_DIR", "ledger")
 
 	if err := vault.Run(vaultDir, ledgerDir); err != nil {
+		log.Printf("Error processing transactions: %v", err)
 		w.WriteHeader(http.StatusInternalServerError)
 		json.NewEncoder(w).Encode(map[string]string{
 			"status":  "error",
-			"message": err.Error(),
+			"message": "Failed to process transactions",
 		})
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
 		"status":  "success",
 		"message": "Transactions processed successfully",
@@ -161,7 +173,11 @@ func calculateSummary(transactions []vault.Transaction) SummaryStats {
 
 	for _, txn := range transactions {
 		var amount float64
-		fmt.Sscanf(txn.Amount, "%f", &amount)
+		n, err := fmt.Sscanf(txn.Amount, "%f", &amount)
+		if err != nil || n != 1 {
+			log.Printf("Warning: Failed to parse amount '%s' for transaction %s, treating as 0.0", txn.Amount, txn.TransactionID)
+			amount = 0.0
+		}
 
 		switch txn.Type {
 		case vault.PaymentTransaction:
@@ -182,21 +198,22 @@ func calculateSummary(transactions []vault.Transaction) SummaryStats {
 	return stats
 }
 
-// renderError renders an error page
-func renderError(w http.ResponseWriter, message string, err error) {
-	w.WriteHeader(http.StatusInternalServerError)
-	fmt.Fprintf(w, "<html><body><h1>Error</h1><p>%s: %v</p></body></html>", message, err)
-}
-
 // getEnvOrDefault returns environment variable value or default if not set
+// Security: Sanitizes both environment values and defaults
 func getEnvOrDefault(name, defaultValue string) string {
 	value := os.Getenv(name)
 	if value == "" {
-		// Try to use absolute path from repository root
-		if absPath, err := filepath.Abs(defaultValue); err == nil {
-			return absPath
+		// Use default value, sanitized
+		absPath, err := filepath.Abs(filepath.Clean(defaultValue))
+		if err != nil {
+			return defaultValue
 		}
-		return defaultValue
+		return absPath
 	}
-	return value
+	// Sanitize environment variable value
+	absPath, err := filepath.Abs(filepath.Clean(value))
+	if err != nil {
+		return value
+	}
+	return absPath
 }

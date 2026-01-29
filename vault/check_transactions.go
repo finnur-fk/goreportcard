@@ -157,10 +157,15 @@ func (tp *TransactionProcessor) readSingleCSV(filename string) ([]Transaction, e
 			continue
 		}
 
-		// Security: Validate date format (basic check)
+		// Security: Validate date format (YYYY-MM-DD or similar)
 		date := strings.TrimSpace(record[0])
 		if len(date) < 8 || len(date) > 20 {
 			tp.logger.Printf("Warning: Line %d in %s has invalid date format, skipping", lineNum, filepath.Base(filename))
+			continue
+		}
+		// Basic format check: should contain digits and dashes/slashes
+		if !strings.ContainsAny(date, "-/") {
+			tp.logger.Printf("Warning: Line %d in %s has invalid date format (missing separator), skipping", lineNum, filepath.Base(filename))
 			continue
 		}
 
