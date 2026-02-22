@@ -1,0 +1,20 @@
+name: ALPA CORE Money Flow Ingestion
+
+# ÞETTA ER SKIPUNIN SEM ÞÚ VARST AÐ SPYRRJA UM:
+on:
+  repository_dispatch:
+    types: [money_flow_update]
+
+jobs:
+  process_flow:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Process 56/44 Split & HEX Audit
+        run: |
+          echo "Processing transaction: ${{ github.event.client_payload.hex_audit }}"
+          echo "Vault Alpha (56%): ${{ github.event.client_payload.vault_56 }}"
+          echo "Ops Beta (44%): ${{ github.event.client_payload.ops_44 }}"
+          # Hérna keyrir þú 2015-Legacy scriptuna þína
