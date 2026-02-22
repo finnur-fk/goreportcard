@@ -48,19 +48,34 @@ type TransactionProcessor struct {
 func NewTransactionProcessor(vaultDir, ledgerDir string) (*TransactionProcessor, error) {
 	logger := log.New(os.Stdout, "[TransactionProcessor] ", log.LstdFlags)
 
+	// Security: Validate and clean paths to prevent directory traversal attacks
+	vaultDir = filepath.Clean(vaultDir)
+	ledgerDir = filepath.Clean(ledgerDir)
+
+	// Security: Ensure paths are absolute and prevent traversal
+	absVaultDir, err := filepath.Abs(vaultDir)
+	if err != nil {
+		return nil, fmt.Errorf("invalid vault directory path: %w", err)
+	}
+
+	absLedgerDir, err := filepath.Abs(ledgerDir)
+	if err != nil {
+		return nil, fmt.Errorf("invalid ledger directory path: %w", err)
+	}
+
 	// Validate vault directory exists
-	if _, err := os.Stat(vaultDir); os.IsNotExist(err) {
-		return nil, fmt.Errorf("vault directory does not exist: %s", vaultDir)
+	if _, err := os.Stat(absVaultDir); os.IsNotExist(err) {
+		return nil, fmt.Errorf("vault directory does not exist: %s", absVaultDir)
 	}
 
 	// Create ledger directory if it doesn't exist
-	if err := os.MkdirAll(ledgerDir, 0755); err != nil {
+	if err := os.MkdirAll(absLedgerDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create ledger directory: %w", err)
 	}
 
 	return &TransactionProcessor{
-		vaultDir:  vaultDir,
-		ledgerDir: ledgerDir,
+		vaultDir:  absVaultDir,
+		ledgerDir: absLedgerDir,
 		logger:    logger,
 	}, nil
 }
@@ -142,15 +157,34 @@ func (tp *TransactionProcessor) readSingleCSV(filename string) ([]Transaction, e
 			continue
 		}
 
+		// Security: Validate date format (YYYY-MM-DD or similar)
+		date := strings.TrimSpace(record[0])
+		if len(date) < 8 || len(date) > 20 {
+			tp.logger.Printf("Warning: Line %d in %s has invalid date format, skipping", lineNum, filepath.Base(filename))
+			continue
+		}
+		// Basic format check: should contain digits and dashes/slashes
+		if !strings.ContainsAny(date, "-/") {
+			tp.logger.Printf("Warning: Line %d in %s has invalid date format (missing separator), skipping", lineNum, filepath.Base(filename))
+			continue
+		}
+
+		// Security: Validate transaction ID (no control characters)
+		txnID := strings.TrimSpace(record[4])
+		if strings.ContainsAny(txnID, "\n\r\t") {
+			tp.logger.Printf("Warning: Line %d in %s has invalid transaction ID with control characters, skipping", lineNum, filepath.Base(filename))
+			continue
+		}
+
 		// Parse transaction type
 		transactionType := tp.categorizeTransaction(record[1], record[2], record[3])
 
 		transaction := Transaction{
-			Date:          strings.TrimSpace(record[0]),
+			Date:          date,
 			Type:          transactionType,
 			Amount:        strings.TrimSpace(record[2]),
 			Description:   strings.TrimSpace(record[3]),
-			TransactionID: strings.TrimSpace(record[4]),
+			TransactionID: txnID,
 		}
 
 		transactions = append(transactions, transaction)

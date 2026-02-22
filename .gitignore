@@ -29,3 +29,5 @@ _repos
 
 goreportcard.db
 main
+db/
+goreportcard
