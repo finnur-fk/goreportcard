@@ -28,4 +28,5 @@ _testmain.go
 _repos
 
 goreportcard.db
+db/
 main
