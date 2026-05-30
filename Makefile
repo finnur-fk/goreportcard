@@ -4,7 +4,7 @@ build:
 	go build ./...
 
 install:
-	./scripts/make-install.sh
+	go build -o goreportcard main.go
 
 lint: fmt vet staticcheck misspell
 
