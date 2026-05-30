@@ -9,7 +9,7 @@ COPY . $GOPATH/src/github.com/gojp/goreportcard
 
 WORKDIR $GOPATH/src/github.com/gojp/goreportcard
 
-RUN ./scripts/make-install.sh
+RUN go build -o goreportcard main.go
 
 EXPOSE 8000
 
