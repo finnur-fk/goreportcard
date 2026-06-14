@@ -141,7 +141,11 @@ func main() {
 	http.HandleFunc(m.instrument("/badge/", makeHandler(db, "badge", handlers.BadgeHandler)))
 	http.HandleFunc(m.instrument("/high_scores/", injectBadgerHandler(db, gh.HighScoresHandler)))
 	http.HandleFunc(m.instrument("/supporters/", gh.SupportersHandler))
+	http.HandleFunc(m.instrument("/ledger/", gh.LedgerHandler))
 	http.HandleFunc(m.instrument("/about/", gh.AboutHandler))
+	http.HandleFunc(m.instrument("/bookkeeping/", injectBadgerHandler(db, gh.BookkeepingHandler)))
+	http.HandleFunc(m.instrument("/api/bookkeeping", injectBadgerHandler(db, gh.BookkeepingAPIHandler)))
+	http.HandleFunc(m.instrument("/bookkeeping/process", injectBadgerHandler(db, gh.ProcessTransactionsHandler)))
 	http.HandleFunc(m.instrument("/", injectBadgerHandler(db, gh.HomeHandler)))
 
 	http.Handle("/metrics", promhttp.Handler())
