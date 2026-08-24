@@ -88,6 +88,44 @@ When Railway bridge variables are set, each transaction is also POSTed to AlpaCo
 | `ALPACORE_WEBHOOK_TIMEOUT_SECONDS` | HTTP timeout (default 30) |
 | `DATABASE_URL` | Postgres ref (shared with Engine) |
 
+## YNAB bootstrap
+
+The YNAB bridge authenticates with a **Personal Access Token** (not OAuth). Run the
+bootstrap once after setting the variables to verify the token, resolve the budget and
+map the AlpaCore account ids onto YNAB accounts:
+
+```bash
+go run vault/cmd/main.go -ynab-bootstrap
+```
+
+| Variable | Purpose |
+|----------|---------|
+| `YNAB_API_KEY` | Personal Access Token (required, never logged) |
+| `YNAB_BUDGET_ID` | Budget UUID or the `last-used` alias; resolved automatically when only one budget exists |
+| `YNAB_BASE_URL` | REST root (default `https://api.ynab.com/v1`) |
+| `YNAB_TIMEOUT_SECONDS` | HTTP timeout (default 30) |
+| `YNAB_ENABLED` | Set `false` to disable the bridge without removing the token |
+| `YNAB_ACCOUNT_MAP` | `alpacore-id=YNAB account name or UUID` pairs, comma separated |
+
+The bootstrap:
+
+- calls `GET /user` and reports `401` (token revoked), `429` (the 200 requests/hour
+  quota) and `5xx` as distinct, retryable-aware errors;
+- calls `GET /budgets`, refuses to guess when several budgets exist and prints the
+  candidate list instead — the chosen id belongs in your secret store, never in the repo;
+- compares `currency_format.iso_code` with the `EUR` ledger currency hardcoded in
+  `vault/dispatch.go` and warns on a mismatch;
+- calls `GET /budgets/{id}/accounts`, drops closed and deleted accounts and warns when
+  no account matches the AlpaCore `paypal-processor` id;
+- stores the `server_knowledge` cursor and replays it as `last_knowledge_of_server` so
+  follow-up calls are delta syncs rather than full downloads.
+
+`YNABMilliunits` and `YNABImportID` convert ledger rows into the integer milliunits and
+the deterministic `import_id` YNAB uses to reject duplicate imports.
+
+> Store `YNAB_API_KEY` in the same secret store as the other Railway variables. The token
+> is never written to logs, reports or files, and plain HTTP base URLs are rejected.
+
 Example output:
 
 ```markdown
@@ -128,7 +166,7 @@ This package follows Go best practices and passes all standard quality checks:
 - ✓ `golint` - Code style checking
 - ✓ `gocyclo` - Cyclomatic complexity (all functions < 15)
 - ✓ `misspell` - Spelling checks
-- ✓ Test coverage: 66.7%
+- ✓ Test coverage: 81.5%
 
 ## Package Structure
 
@@ -136,6 +174,9 @@ This package follows Go best practices and passes all standard quality checks:
 vault/
 ├── check_transactions.go      # Main transaction processor implementation
 ├── check_transactions_test.go # Comprehensive test suite
+├── dispatch.go                # AlpaCore webhook dispatch
+├── ynab.go                    # YNAB REST client (PAT auth, typed errors, delta sync)
+├── ynab_bootstrap.go          # YNAB connection bootstrap and payload helpers
 ├── cmd/
 │   └── main.go               # Command-line interface
 ├── sample_transactions.csv   # Example CSV file
@@ -149,11 +190,20 @@ vault/
 - `TransactionType`: Enum for transaction categories (Payments, Transfers, Fees)
 - `Transaction`: Represents a single transaction record
 - `TransactionProcessor`: Main processor for handling transactions
+- `YNABConfig`: Personal Access Token settings read from the environment
+- `YNABClient`: Authenticated, rate-limit aware YNAB REST client
+- `YNABError`: Classified API failure (`auth`, `forbidden`, `not_found`, `rate_limit`, `temporary`, `request`)
+- `YNABBootstrapResult`: Resolved budget, accounts, mapping and warnings
 
 ### Functions
 
 - `NewTransactionProcessor(vaultDir, ledgerDir string)`: Create a new processor
 - `Run(vaultDir, ledgerDir string)`: Convenience function to run the full workflow
+- `LoadYNABConfig()`: Read the `YNAB_*` environment variables
+- `BootstrapYNAB(ctx, logger)`: Validate the token and resolve budget/accounts
+- `YNABMilliunits(amount string)`: Convert a decimal amount into YNAB milliunits
+- `YNABImportID(txn Transaction)`: Build the deterministic `import_id` for deduplication
+- `BuildYNABTransaction(txn Transaction, accountID string)`: Build a YNAB transaction payload
 
 ### Methods
 

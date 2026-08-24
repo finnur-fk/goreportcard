@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -16,6 +17,7 @@ func main() {
 	// Define command-line flags
 	vaultDir := flag.String("vault", "vault", "Directory containing PayPal CSV transaction files")
 	ledgerDir := flag.String("ledger", "ledger", "Directory for generated ledger reports")
+	ynabBootstrap := flag.Bool("ynab-bootstrap", false, "Validate the YNAB access token and resolve budget/accounts")
 	help := flag.Bool("help", false, "Show usage information")
 
 	flag.Parse()
@@ -26,7 +28,15 @@ func main() {
 		flag.PrintDefaults()
 		fmt.Println("\nExample:")
 		fmt.Println("  go run vault/cmd/main.go -vault=./vault -ledger=./ledger")
+		fmt.Println("  go run vault/cmd/main.go -ynab-bootstrap")
 		os.Exit(0)
+	}
+
+	if *ynabBootstrap {
+		if err := vault.PrintYNABBootstrap(context.Background()); err != nil {
+			log.Fatalf("YNAB bootstrap failed: %v", err)
+		}
+		return
 	}
 
 	// Convert to absolute paths

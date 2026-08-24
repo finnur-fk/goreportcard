@@ -144,20 +144,26 @@ func postTransaction(client *http.Client, cfg WebhookConfig, txn Transaction) er
 	return nil
 }
 
-func buildWebhookPayload(txn Transaction) map[string]interface{} {
-	amount, _ := strconv.ParseFloat(strings.TrimSpace(txn.Amount), 64)
-
+// webhookTransactionID builds the stable identifier shared by the AlpaCore payload
+// and the YNAB import_id. Transactions without an id fall back to a timestamp.
+func webhookTransactionID(txn Transaction) string {
 	id := strings.TrimSpace(txn.TransactionID)
 	if id == "" {
-		id = fmt.Sprintf("paypal-%d", time.Now().UnixNano())
-	} else if !strings.HasPrefix(strings.ToLower(id), "paypal-") {
+		return fmt.Sprintf("paypal-%d", time.Now().UnixNano())
+	}
+	if !strings.HasPrefix(strings.ToLower(id), "paypal-") {
 		id = "paypal-" + id
 	}
+	return id
+}
+
+func buildWebhookPayload(txn Transaction) map[string]interface{} {
+	amount, _ := strconv.ParseFloat(strings.TrimSpace(txn.Amount), 64)
 
 	note := fmt.Sprintf("PayPal %s: %s", txn.Type, strings.TrimSpace(txn.Description))
 
 	return map[string]interface{}{
-		"id":          id,
+		"id":          webhookTransactionID(txn),
 		"state":       "completed",
 		"amount":      amount,
 		"currency":    defaultCurrency,
