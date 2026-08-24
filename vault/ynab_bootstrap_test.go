@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 const (
@@ -238,6 +239,13 @@ func TestYNABMilliunits(t *testing.T) {
 		{"2.99", 2990},
 		{"-2.999", -2999},
 		{"1234567.89", 1234567890},
+		{"+5", 5000},
+		{".25", 250},
+		{"8.615", 8615},
+		{"1.9999", 2000},
+		{"-1.9995", -2000},
+		{"-0.0004", 0},
+		{"0.001", 1},
 	}
 
 	for _, tc := range cases {
@@ -250,7 +258,7 @@ func TestYNABMilliunits(t *testing.T) {
 		}
 	}
 
-	for _, invalid := range []string{"", "   ", "abc", "1,50"} {
+	for _, invalid := range []string{"", "   ", "abc", "1,50", ".", "-", "1e3", "1.2.3", "10 00"} {
 		if _, err := YNABMilliunits(invalid); err == nil {
 			t.Fatalf("amount %q should be rejected", invalid)
 		}
@@ -274,6 +282,14 @@ func TestYNABImportID(t *testing.T) {
 	}
 	if long == YNABImportID(Transaction{TransactionID: strings.Repeat("A", 79) + "B"}) {
 		t.Fatal("distinct transactions must not collide")
+	}
+
+	unicode := YNABImportID(Transaction{TransactionID: strings.Repeat("þögn", 20)})
+	if utf8.RuneCountInString(unicode) != ynabMaxImportIDLength {
+		t.Fatalf("import id must be %d runes, got %d", ynabMaxImportIDLength, utf8.RuneCountInString(unicode))
+	}
+	if !utf8.ValidString(unicode) {
+		t.Fatalf("truncation produced invalid utf-8: %q", unicode)
 	}
 }
 

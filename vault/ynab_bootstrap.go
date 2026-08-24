@@ -301,22 +301,101 @@ func sortedKeys(m map[string]string) []string {
 }
 
 // YNABMilliunits converts a decimal amount such as "100.50" into YNAB milliunits (100500).
-// YNAB stores every amount as an integer scaled by 1000.
+// The conversion uses integer arithmetic so money values are never distorted by binary
+// floating point rounding; a fourth decimal or beyond is rounded half away from zero.
 func YNABMilliunits(amount string) (int64, error) {
-	trimmed := strings.TrimSpace(amount)
-	if trimmed == "" {
+	digits := strings.TrimSpace(amount)
+	if digits == "" {
 		return 0, errors.New("empty amount")
 	}
 
-	value, err := strconv.ParseFloat(trimmed, 64)
-	if err != nil {
-		return 0, fmt.Errorf("parse amount %q: %w", trimmed, err)
-	}
-	if math.IsNaN(value) || math.IsInf(value, 0) {
-		return 0, fmt.Errorf("amount %q is not a finite number", trimmed)
+	negative := false
+	switch digits[0] {
+	case '-':
+		negative = true
+		digits = digits[1:]
+	case '+':
+		digits = digits[1:]
 	}
 
-	return int64(math.Round(value * 1000)), nil
+	whole, fraction, _ := strings.Cut(digits, ".")
+	if whole == "" && fraction == "" {
+		return 0, fmt.Errorf("parse amount %q: no digits", amount)
+	}
+	if whole == "" {
+		whole = "0"
+	}
+
+	units, err := parseYNABDigits(whole)
+	if err != nil {
+		return 0, fmt.Errorf("parse amount %q: %w", amount, err)
+	}
+	milliunits, err := parseYNABFraction(fraction)
+	if err != nil {
+		return 0, fmt.Errorf("parse amount %q: %w", amount, err)
+	}
+
+	if units > (math.MaxInt64-milliunits)/1000 {
+		return 0, fmt.Errorf("parse amount %q: value out of range", amount)
+	}
+
+	total := units*1000 + milliunits
+	if negative {
+		return -total, nil
+	}
+	return total, nil
+}
+
+// parseYNABDigits converts a bare digit string into an integer, rejecting anything else.
+func parseYNABDigits(digits string) (int64, error) {
+	if digits == "" {
+		return 0, errors.New("missing digits")
+	}
+	for _, r := range digits {
+		if r < '0' || r > '9' {
+			return 0, fmt.Errorf("unexpected character %q", r)
+		}
+	}
+
+	value, err := strconv.ParseInt(digits, 10, 64)
+	if err != nil {
+		return 0, errors.New("value out of range")
+	}
+	return value, nil
+}
+
+// parseYNABFraction converts the fractional part into milliunits, rounding any extra digit.
+func parseYNABFraction(fraction string) (int64, error) {
+	if fraction == "" {
+		return 0, nil
+	}
+
+	padded := fraction
+	for len(padded) < 4 {
+		padded += "0"
+	}
+
+	milliunits, err := parseYNABDigits(padded[:3])
+	if err != nil {
+		return 0, err
+	}
+	if err := ensureYNABDigits(padded[3:]); err != nil {
+		return 0, err
+	}
+	if padded[3] >= '5' {
+		milliunits++
+	}
+
+	return milliunits, nil
+}
+
+func ensureYNABDigits(digits string) error {
+	for _, r := range digits {
+		if r < '0' || r > '9' {
+			return fmt.Errorf("unexpected character %q", r)
+		}
+	}
+	return nil
 }
 
 // YNABImportID builds the deterministic import_id that lets YNAB reject duplicates.
@@ -330,8 +409,10 @@ func YNABImportID(txn Transaction) string {
 }
 
 // shortenImportID keeps the identifier within the 36 character limit YNAB enforces.
+// It slices by rune so a multi-byte character is never cut in half.
 func shortenImportID(id string) string {
-	if len(id) <= ynabMaxImportIDLength {
+	runes := []rune(id)
+	if len(runes) <= ynabMaxImportIDLength {
 		return id
 	}
 
@@ -339,7 +420,7 @@ func shortenImportID(id string) string {
 	_, _ = digest.Write([]byte(id))
 	suffix := fmt.Sprintf("-%08x", digest.Sum32())
 
-	return id[:ynabMaxImportIDLength-len(suffix)] + suffix
+	return string(runes[:ynabMaxImportIDLength-len(suffix)]) + suffix
 }
 
 // BuildYNABTransaction converts a ledger transaction into the YNAB transaction payload.
