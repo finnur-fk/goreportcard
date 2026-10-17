@@ -99,9 +99,21 @@ read-only web research; it does not send email or move money.
 | `ALPACORE_APEX_BASE_URL` | AlpaCore base URL (HTTPS required; for example `https://alpacore.net`) |
 | `SOVEREIGN_GOD_KEY` | Engine owner secret sent as `X-Sovereign-God-Key` (required, never logged) |
 
-Call `vault.ScrapeApex(ctx, targetURL)` from Go code. The request has a 30-second
-timeout and returns an error for missing configuration, authorization or HTTP
-failures, malformed responses, or a rejected scrape. No live scrape is run automatically:
+Run an explicit scrape from the repository root with:
+
+```bash
+go run ./vault/cmd -apex-scrape=https://example.org
+```
+
+The command prints the result as JSON. It performs no scrape unless
+`-apex-scrape` is supplied. The request has a 30-second timeout and returns an
+error for missing configuration, authorization or HTTP failures, malformed
+responses, or a rejected scrape. From Go code, call
+`vault.ScrapeApex(ctx, targetURL)`.
+
+For a standalone CLI deployment, build and run the vault command explicitly;
+the repository's root Dockerfile builds and starts the separate Go Report Card
+HTTP server, not this CLI.
 
 ```go
 result, err := vault.ScrapeApex(ctx, "https://example.org")

@@ -84,6 +84,20 @@ func TestScrapeApexRejectsInsecureRemoteBaseURL(t *testing.T) {
 	}
 }
 
+func TestScrapeApexRejectsEmptyQueryAndFragmentDelimiters(t *testing.T) {
+	for _, baseURL := range []string{"https://alpacore.net?", "https://alpacore.net#"} {
+		t.Run(baseURL, func(t *testing.T) {
+			t.Setenv("ALPACORE_APEX_BASE_URL", baseURL)
+			t.Setenv("SOVEREIGN_GOD_KEY", "test-owner-key")
+
+			_, err := ScrapeApex(context.Background(), "https://example.org")
+			if err == nil || !strings.Contains(err.Error(), "HTTPS URL") {
+				t.Fatalf("expected invalid base URL error, got %v", err)
+			}
+		})
+	}
+}
+
 func TestScrapeApexReportsHTTPAndDecodeErrors(t *testing.T) {
 	for _, test := range []struct {
 		name       string
@@ -92,9 +106,8 @@ func TestScrapeApexReportsHTTPAndDecodeErrors(t *testing.T) {
 		wantError  string
 	}{
 		{name: "unauthorized", statusCode: http.StatusUnauthorized, body: `{"message":"unauthorized"}`, wantError: "HTTP 401"},
-		{name: "redirect", statusCode: http.StatusTemporaryRedirect, body: "", wantError: "HTTP 307"},
 		{name: "malformed response", statusCode: http.StatusOK, body: `{`, wantError: "decode Apex scrape response"},
-		{name: "scrape rejected", statusCode: http.StatusOK, body: `{"ok":false,"error":"url is invalid"}`, wantError: "Apex scrape failed: url is invalid"},
+		{name: "scrape rejected", statusCode: http.StatusOK, body: `{"ok":false,"error":"url is invalid"}`, wantError: "apex scrape failed: url is invalid"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -110,5 +123,29 @@ func TestScrapeApexReportsHTTPAndDecodeErrors(t *testing.T) {
 				t.Fatalf("expected error containing %q, got %v", test.wantError, err)
 			}
 		})
+	}
+}
+
+func TestScrapeApexDoesNotFollowRedirects(t *testing.T) {
+	destinationReceived := false
+	destination := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		destinationReceived = true
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer destination.Close()
+
+	redirect := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, destination.URL, http.StatusTemporaryRedirect)
+	}))
+	defer redirect.Close()
+
+	t.Setenv("ALPACORE_APEX_BASE_URL", redirect.URL)
+	t.Setenv("SOVEREIGN_GOD_KEY", "test-owner-key")
+	_, err := ScrapeApex(context.Background(), "https://example.org")
+	if err == nil || !strings.Contains(err.Error(), "HTTP 307") {
+		t.Fatalf("expected redirect error, got %v", err)
+	}
+	if destinationReceived {
+		t.Fatal("redirect destination received a request")
 	}
 }

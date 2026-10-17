@@ -45,7 +45,7 @@ func ScrapeApex(ctx context.Context, targetURL string) (ApexScrapeResult, error)
 	parsedBaseURL, err := url.Parse(baseURL)
 	if err != nil || parsedBaseURL.Hostname() == "" || parsedBaseURL.User != nil ||
 		(parsedBaseURL.Scheme != "https" && !(parsedBaseURL.Scheme == "http" && isLoopbackHost(parsedBaseURL.Host))) ||
-		parsedBaseURL.RawQuery != "" || parsedBaseURL.Fragment != "" {
+		strings.ContainsAny(baseURL, "?#") {
 		return ApexScrapeResult{}, fmt.Errorf("ALPACORE_APEX_BASE_URL must be an HTTPS URL (HTTP is allowed only for loopback tests)")
 	}
 	ownerKey := strings.TrimSpace(os.Getenv("SOVEREIGN_GOD_KEY"))
@@ -88,7 +88,7 @@ func ScrapeApex(ctx context.Context, targetURL string) (ApexScrapeResult, error)
 		return ApexScrapeResult{}, fmt.Errorf("read Apex scrape response: %w", err)
 	}
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return ApexScrapeResult{}, fmt.Errorf("Apex scrape returned HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return ApexScrapeResult{}, fmt.Errorf("apex scrape returned HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
 	var result ApexScrapeResult
@@ -97,9 +97,9 @@ func ScrapeApex(ctx context.Context, targetURL string) (ApexScrapeResult, error)
 	}
 	if !result.OK {
 		if result.Error == "" {
-			return result, fmt.Errorf("Apex scrape failed without an error message")
+			return result, fmt.Errorf("apex scrape failed without an error message")
 		}
-		return result, fmt.Errorf("Apex scrape failed: %s", result.Error)
+		return result, fmt.Errorf("apex scrape failed: %s", result.Error)
 	}
 	return result, nil
 }
