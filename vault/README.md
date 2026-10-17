@@ -88,6 +88,41 @@ When Railway bridge variables are set, each transaction is also POSTed to AlpaCo
 | `ALPACORE_WEBHOOK_TIMEOUT_SECONDS` | HTTP timeout (default 30) |
 | `DATABASE_URL` | Postgres ref (shared with Engine) |
 
+## Apex read-only scrape
+
+The `vault.ScrapeApex` function submits a target URL to AlpaCore's owner-gated
+`POST /api/apex/scrape` endpoint and returns the research result. It only performs
+read-only web research; it does not send email or move money.
+
+| Variable | Purpose |
+|----------|---------|
+| `ALPACORE_APEX_BASE_URL` | AlpaCore base URL (HTTPS required; for example `https://alpacore.net`) |
+| `SOVEREIGN_GOD_KEY` | Engine owner secret sent as `X-Sovereign-God-Key` (required, never logged) |
+
+Run an explicit scrape from the repository root with:
+
+```bash
+go run ./vault/cmd -apex-scrape=https://example.org
+```
+
+The command prints the result as JSON. It performs no scrape unless
+`-apex-scrape` is supplied. The request has a 30-second timeout and returns an
+error for missing configuration, authorization or HTTP failures, malformed
+responses, or a rejected scrape. From Go code, call
+`vault.ScrapeApex(ctx, targetURL)`.
+
+For a standalone CLI deployment, build and run the vault command explicitly;
+the repository's root Dockerfile builds and starts the separate Go Report Card
+HTTP server, not this CLI.
+
+```go
+result, err := vault.ScrapeApex(ctx, "https://example.org")
+if err != nil {
+    return err
+}
+fmt.Println(result.Title, result.Emails)
+```
+
 ## YNAB bootstrap
 
 The YNAB bridge authenticates with a **Personal Access Token** (not OAuth). Run the
