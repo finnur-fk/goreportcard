@@ -88,6 +88,29 @@ When Railway bridge variables are set, each transaction is also POSTed to AlpaCo
 | `ALPACORE_WEBHOOK_TIMEOUT_SECONDS` | HTTP timeout (default 30) |
 | `DATABASE_URL` | Postgres ref (shared with Engine) |
 
+## Apex read-only scrape
+
+The `vault.ScrapeApex` function submits a target URL to AlpaCore's owner-gated
+`POST /api/apex/scrape` endpoint and returns the research result. It only performs
+read-only web research; it does not send email or move money.
+
+| Variable | Purpose |
+|----------|---------|
+| `ALPACORE_APEX_BASE_URL` | AlpaCore base URL (HTTPS required; for example `https://alpacore.net`) |
+| `SOVEREIGN_GOD_KEY` | Engine owner secret sent as `X-Sovereign-God-Key` (required, never logged) |
+
+Call `vault.ScrapeApex(ctx, targetURL)` from Go code. The request has a 30-second
+timeout and returns an error for missing configuration, authorization or HTTP
+failures, malformed responses, or a rejected scrape. No live scrape is run automatically:
+
+```go
+result, err := vault.ScrapeApex(ctx, "https://example.org")
+if err != nil {
+    return err
+}
+fmt.Println(result.Title, result.Emails)
+```
+
 ## YNAB bootstrap
 
 The YNAB bridge authenticates with a **Personal Access Token** (not OAuth). Run the
